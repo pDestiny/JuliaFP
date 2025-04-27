@@ -1,6 +1,6 @@
 module FP
 
-export Result, is_ok, map, flatmap, curry, branch, fork, fold, diffseq
+export Result, is_ok, map, flatmap, curry, branch, fork, fold, diffseq, flip, groupby
 
 ### default Funcional Programming Starts ###
 
@@ -25,10 +25,10 @@ map(f::Function, r::Ok, args...) = begin
     end
 end
 
-curry(f::Function, args...) = begin
+curry(f::Function, args...;kwargs...) = begin
    method = first(methods(f))
-   required_args = method.nargs - 1
-   return length(args) >= required_args ? f(args...) : (more_args...) -> curry(f, args..., more_args...)
+   required_args = method.nargs - length(Base.kwarg_decl(method))
+   return length(args) >= required_args ? f(args...;kwargs...) : (more_args...;more_kwargs...) -> curry(f, args..., more_args...;kwargs..., more_kwargs...)
 end
 
 map(f::Function, r::Error) = r
@@ -103,6 +103,25 @@ function geti(idx::Vector{Union{Int64, T}}, subject::Union{Dict{T, E}, AbstractA
         return (1 <= max(idx...) <= length(subject)) ? subject[idx] : throw(DomainError("[$(join(idx, " "))] indexex have out of range item from sequence(length=$(length(idx)))"))
     elseif subject isa Dict
         return Base.map(i -> get(subject, i, default), idx)
+    end
+end
+
+function groupby(cond::Function, seq::Vector{T})::Dict{Any, Vector{T}} where {T}
+    # group data by condition
+    return reduce((acc, item) -> merge(vcat, acc, Dict{Any, Vector{T}}(cond(item) => [item])), seq, init=Dict{Any, Vector{T}}())
+end
+
+# unfortunately, julia's dispatch system doesn't allow easy pizy fliping.
+function flip(f::Function, args...; kwargs...)::Union{Function, Any}
+    m = first(methods(f))
+    if occursin("Base", string(m.module))
+        throw(ErrorException("Base Module function is not available for flip function. Sorry!"))
+    end
+    num_args = m.nargs - length(Base.kwarg_decl(m)) - 1
+    if num_args <= length(args)
+        return f(reverse(args[1:num_args])...;kwargs...)
+    else
+        return (more_args...;more_kwargs...) -> flip(f, vcat(args..., more_args...)...;merge(kwargs, more_kwargs)...)
     end
 end
 

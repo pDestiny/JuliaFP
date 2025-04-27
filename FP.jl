@@ -1,6 +1,6 @@
 module FP
 
-export Result, is_ok, map, flatmap, curry, branch, fork, fold, diffseq, flip, groupby
+export Result, is_ok, map, flatmap, curry, branch, fork, fold, diffseq, flip, groupby, interleave
 
 ### default Funcional Programming Starts ###
 
@@ -53,11 +53,11 @@ branch(cond::Function, f::Function, g::Function) = (r::AbstractResult, args...) 
 
 ### Toolz itertools Implementation ###
 function cons(add_target::T, seq::Vector{T}) where {T}
-    return [[add_target]; copy(seq)]
+    return [[add_target]; deepcop(seq)]
 end
 
 function cone(add_target::T, seq::Vector{T}) where {T}
-    return [copy(seq); [add_target]]
+    return [deepcop(seq); [add_target]]
 end
 
 cmap(f::Function) = (itr::AbstractArray) -> Base.map(f, itr)
@@ -76,17 +76,17 @@ function diffseq(seq_a::Vector{T}, seq_b::Vector{T})::Vector{Tuple{Int, Union{T,
 end
 
 function dropf(n::Int, seq::AbstractArray{T})::AbstractArray{T} where {T}
-    seq = copy(seq)
+    seq = deepcop(seq)
     return n <= length(seq) ? seq[n+1:end] : throw(DomainError("$n is bigger than Sequence size($(length(seq)))"))
 end
 
 function dropl(n::Int, seq::AbstractArray{T})::AbstractArray{T} where {T}
-    seq = copy(seq)
+    seq = deepcop(seq)
     return n <= length(seq) ? seq[n:length(seq) - 1] : throw(DomainError("$n is bigger than Sequence size($(length(seq)))"))
 end
 
-function frequencies(seq::AbstractArray{T})::Dict{T, Int64} where {T}
-    seq = copy(seq)
+function frequencies(seq::Vector{T})::Dict{T, Int64} where {T}
+    seq = deepcop(seq)
     return isempty(seq) ? Dict{T, Int64}() : Dict(Base.map(item -> (item, count((==)(item), seq)), unique(seq)))
 end
 
@@ -125,4 +125,73 @@ function flip(f::Function, args...; kwargs...)::Union{Function, Any}
     end
 end
 
+function interleave(deepseq::Vector{Vector{T}})::Vector{T} where {T}
+    max_len = maximum(length.(deepseq))
+    deepseq_padded::Vector{Vector{Union{Nothing, T}}} = Base.map(arr -> vcat(arr..., fill(nothing, max_len - length(arr))), deepseq)
+    return vcat(Base.map(filter((!)∘isnothing), eachrow(hcat(deepseq_padded...)))...)
 end
+
+function interpose(el::T, seq::Vector{Union{E}})::Vector{Union{T, E}} where {T, E}
+    return reduce((acc, item) -> vcat(acc..., item, el), seq, init=Vector{Union{T, E}}())
+end
+
+function isuniq(seqs::Vector{T})::Bool where {T}
+    return length(unique(seqs)) == length(seqs)
+end
+
+function isuniq(str::AbstractString)::Bool
+    return length(unique(split(str, ""))) == length(str)
+end
+
+# inner join based on left
+function arrjoin(seq_a::Vector{<:Tuple}, seq_b::Vector{<:Tuple}, left_on::Function, right_on::Function; how::Symbol=:inner)
+    seq_a_grp = groupby(left_on, seq_a)
+    seq_b_grp = groupby(right_on, seq_b)
+    result = []
+
+    if how == :inner
+        common_keys = intersect(Set(keys(seq_a_grp)), Set(keys(seq_b_grp)))
+        for k in common_keys
+            a_items = get(seq_a_grp, k, [])
+            b_items = get(seq_b_grp, k, [])
+            for as in a_items, bs in b_items
+                push!(result, (as, bs))
+            end
+        end
+    elseif how == :left
+        for k in keys(seq_a_grp)
+            a_items = get(seq_a_grp, k, [])
+            b_items = get(seq_b_grp, k, nothing)
+            for as in a_items
+                if b_items === nothing
+                    push!(result, ((as, (missing, missing))))
+                else
+                    for bs in b_items
+                        push!(result, ((as, bs)))
+                    end
+                end
+            end
+        end
+    elseif how == :right
+        for k in keys(seq_b_grp)
+            a_items = get(seq_a_grp, k, nothing)
+            b_items = get(seq_b_grp, k, [])
+            for bs in b_items
+                if a_items === nothing
+                    push!(result, (((missing, missing), bs)))
+                else
+                    for as in a_items
+                        push!(result, ((as, bs)))
+                    end
+                end
+            end
+        end
+    else
+        throw(DomainError("$(string(how)) is not defined in arrjoin function. Choose between [:inner, :left, :right]"))
+    end
+
+    return result
+end
+end
+
+

@@ -10,7 +10,7 @@ struct Ok{T} <: AbstractResult{T, Nothing}
     value::T
 end
 
-struct Error{E} <: AbstractResult{Nothing, E} 
+struct Error{E} <: AbstractResult{Nothing, E}
     error::E
 end
 
@@ -25,15 +25,15 @@ map(f::Function, r::Ok, args...) = begin
     end
 end
 
-curry(f::Function, args...;kwargs...) = begin
-   method = first(methods(f))
-   required_args = method.nargs - length(Base.kwarg_decl(method))
-   return length(args) >= required_args ? f(args...;kwargs...) : (more_args...;more_kwargs...) -> curry(f, args..., more_args...;kwargs..., more_kwargs...)
+curry(f::Function, args...; kwargs...) = begin
+    method = first(methods(f))
+    required_args = method.nargs - length(Base.kwarg_decl(method))
+    return length(args) >= required_args ? f(args...; kwargs...) :
+           (more_args...; more_kwargs...) -> curry(f, args..., more_args...; kwargs..., more_kwargs...)
 end
 
 map(f::Function, r::Error) = r
 
-# 
 flatmap(f::Function, r::Ok, args...) = begin
     try
         return f(r.value, args...)
@@ -42,16 +42,20 @@ flatmap(f::Function, r::Ok, args...) = begin
     end
 end
 
-fork(f::Function, g::Function, combine::Function) = (r::AbstractResult, args...) -> combine(f(r, args...), g(r, args...))
+fork(f::Function, g::Function, combine::Function) =
+    (r::AbstractResult, args...) -> combine(f(r, args...), g(r, args...))
 
-fold(r::AbstractResult, on_success::Function, on_fail::Function) = is_ok(r) ? on_success(r) : on_fail(r)
+fold(r::AbstractResult, on_success::Function, on_fail::Function) =
+    is_ok(r) ? on_success(r) : on_fail(r)
 
-branch(cond::Function, f::Function, g::Function) = (r::AbstractResult, args...) -> cond(r) ? map(f, r, args...) : map(g, r, args...)
+branch(cond::Function, f::Function, g::Function) =
+    (r::AbstractResult, args...) -> cond(r) ? map(f, r, args...) : map(g, r, args...)
 
 ### default functional Programming Function Ends ###
 
 
-### Toolz itertools Implementation ###
+### Toolz / itertools‑style helpers ###
+
 function cons(add_target::T, seq::Vector{T}) where {T}
     return [[add_target]; deepcop(seq)]
 end
@@ -63,8 +67,7 @@ end
 cmap(f::Function) = (itr::AbstractArray) -> Base.map(f, itr)
 cfilter(cond::Function) = (itr::AbstractArray) -> Base.filter(cond, itr)
 
-# difference at position compared to seq_A -> 
-# return value is (index, different item)
+# diff by position between two sequences
 function diffseq(seq_a::Vector{T}, seq_b::Vector{T})::Vector{Tuple{Int, Union{T, Nothing}, Union{T, Nothing}}} where {T}
     length_a, length_b = length(seq_a), length(seq_b)
     maxlen = max(length_a, length_b)
@@ -77,20 +80,25 @@ end
 
 function dropf(n::Int, seq::AbstractArray{T})::AbstractArray{T} where {T}
     seq = deepcop(seq)
-    return n <= length(seq) ? seq[n+1:end] : throw(DomainError("$n is bigger than Sequence size($(length(seq)))"))
+    return n <= length(seq) ? seq[n+1:end] :
+           throw(DomainError("$n is bigger than sequence size ($(length(seq)))"))
 end
 
 function dropl(n::Int, seq::AbstractArray{T})::AbstractArray{T} where {T}
     seq = deepcop(seq)
-    return n <= length(seq) ? seq[n:length(seq) - 1] : throw(DomainError("$n is bigger than Sequence size($(length(seq)))"))
+    return n <= length(seq) ? seq[n:length(seq) - 1] :
+           throw(DomainError("$n is bigger than sequence size ($(length(seq)))"))
 end
 
 function frequencies(seq::Vector{T})::Dict{T, Int64} where {T}
     seq = deepcop(seq)
-    return isempty(seq) ? Dict{T, Int64}() : Dict(Base.map(item -> (item, count((==)(item), seq)), unique(seq)))
+    return isempty(seq) ? Dict{T, Int64}() :
+           Dict(Base.map(item -> (item, count((==)(item), seq)), unique(seq)))
 end
 
-function geti(idx::Union{Int64, T}, subject::Union{Dict{T, E}, AbstractArray{E}}; default::Union{Nothing, T}=nothing)::Union{Nothing, E} where {T, E}
+function geti(idx::Union{Int64, T},
+              subject::Union{Dict{T, E}, AbstractArray{E}};
+              default::Union{K, T} = nothing)::Union{K, E} where {T, E, K}
     if subject isa AbstractArray
         return (1 <= idx <= length(subject)) ? subject[idx] : default
     elseif subject isa Dict
@@ -98,100 +106,120 @@ function geti(idx::Union{Int64, T}, subject::Union{Dict{T, E}, AbstractArray{E}}
     end
 end
 
-function geti(idx::Vector{Union{Int64, T}}, subject::Union{Dict{T, E}, AbstractArray{E}}; default::Union{Nothing, T}=nothing)::Vector{Union{E, Nothing}} where {T, E}
+function geti(idx::Vector{Union{Int64, T}},
+              subject::Union{Dict{T, E}, AbstractArray{E}};
+              default::Union{Nothing, T} = nothing)::Vector{Union{E, Nothing}} where {T, E}
     if subject isa AbstractArray
-        return (1 <= max(idx...) <= length(subject)) ? subject[idx] : throw(DomainError("[$(join(idx, " "))] indexex have out of range item from sequence(length=$(length(idx)))"))
+        return (1 <= maximum(idx) <= length(subject)) ? subject[idx] :
+               throw(DomainError("[$(join(idx, " "))] indices out of range (length=$(length(subject)))"))
     elseif subject isa Dict
         return Base.map(i -> get(subject, i, default), idx)
     end
 end
 
 function groupby(cond::Function, seq::Vector{T})::Dict{Any, Vector{T}} where {T}
-    # group data by condition
-    return reduce((acc, item) -> merge(vcat, acc, Dict{Any, Vector{T}}(cond(item) => [item])), seq, init=Dict{Any, Vector{T}}())
+    return reduce((acc, item) -> merge(vcat, acc, Dict(cond(item) => [item])),
+                  seq, init = Dict{Any, Vector{T}}())
 end
 
-# unfortunately, julia's dispatch system doesn't allow easy pizy fliping.
 function flip(f::Function, args...; kwargs...)::Union{Function, Any}
     m = first(methods(f))
     if occursin("Base", string(m.module))
-        throw(ErrorException("Base Module function is not available for flip function. Sorry!"))
+        throw(ErrorException("Base‑module function cannot be flipped"))
     end
     num_args = m.nargs - length(Base.kwarg_decl(m)) - 1
     if num_args <= length(args)
-        return f(reverse(args[1:num_args])...;kwargs...)
+        return f(reverse(args[1:num_args])...; kwargs...)
     else
-        return (more_args...;more_kwargs...) -> flip(f, vcat(args..., more_args...)...;merge(kwargs, more_kwargs)...)
+        return (more_args...; more_kwargs...) ->
+            flip(f, vcat(args..., more_args...)...; merge(kwargs, more_kwargs)...)
     end
 end
 
 function interleave(deepseq::Vector{Vector{T}})::Vector{T} where {T}
     max_len = maximum(length.(deepseq))
-    deepseq_padded::Vector{Vector{Union{Nothing, T}}} = Base.map(arr -> vcat(arr..., fill(nothing, max_len - length(arr))), deepseq)
-    return vcat(Base.map(filter((!)∘isnothing), eachrow(hcat(deepseq_padded...)))...)
+    padded = Base.map(arr -> vcat(arr..., fill(nothing, max_len - length(arr))), deepseq)
+    return vcat(Base.map(filter((!)∘isnothing), eachrow(hcat(padded...)))...)
 end
 
 function interpose(el::T, seq::Vector{Union{E}})::Vector{Union{T, E}} where {T, E}
-    return reduce((acc, item) -> vcat(acc..., item, el), seq, init=Vector{Union{T, E}}())
+    return reduce((acc, item) -> vcat(acc..., item, el),
+                  seq, init = Vector{Union{T, E}}())
 end
 
-function isuniq(seqs::Vector{T})::Bool where {T}
-    return length(unique(seqs)) == length(seqs)
-end
+isuniq(seqs::Vector{T}) where {T} = length(unique(seqs)) == length(seqs)
+isuniq(str::AbstractString) = length(unique(split(str, ""))) == length(str)
 
-function isuniq(str::AbstractString)::Bool
-    return length(unique(split(str, ""))) == length(str)
-end
-
-# inner join based on left
-function arrjoin(seq_a::Vector{<:Tuple}, seq_b::Vector{<:Tuple}, left_on::Function, right_on::Function; how::Symbol=:inner)
+### arrjoin – refactored ###
+function arrjoin(
+    seq_a::Vector{<:Tuple},
+    seq_b::Vector{<:Tuple},
+    left_on::Function,
+    right_on::Function;
+    how::Symbol = :inner,
+)
+    # group by key on each side
     seq_a_grp = groupby(left_on, seq_a)
     seq_b_grp = groupby(right_on, seq_b)
-    result = []
 
-    if how == :inner
-        common_keys = intersect(Set(keys(seq_a_grp)), Set(keys(seq_b_grp)))
-        for k in common_keys
-            a_items = get(seq_a_grp, k, [])
-            b_items = get(seq_b_grp, k, [])
-            for as in a_items, bs in b_items
+    keys_iter = if how == :inner
+        intersect(keys(seq_a_grp), keys(seq_b_grp))
+    elseif how == :left
+        keys(seq_a_grp)
+    elseif how == :right
+        keys(seq_b_grp)
+    else
+        throw(DomainError("$(how) is not valid; choose :inner, :left, or :right"))
+    end
+
+    missing_left  = (missing, missing)
+    missing_right = (missing, missing)
+
+    result = Tuple[]
+    for k in keys_iter
+        a_items = get(seq_a_grp, k, nothing)
+        b_items = get(seq_b_grp, k, nothing)
+
+        if a_items === nothing           # right‑only rows
+            @inbounds for bs in b_items
+                push!(result, (missing_left, bs))
+            end
+        elseif b_items === nothing       # left‑only rows
+            @inbounds for as in a_items
+                push!(result, (as, missing_right))
+            end
+        else                              # matched rows
+            @inbounds for as in a_items, bs in b_items
                 push!(result, (as, bs))
             end
         end
-    elseif how == :left
-        for k in keys(seq_a_grp)
-            a_items = get(seq_a_grp, k, [])
-            b_items = get(seq_b_grp, k, nothing)
-            for as in a_items
-                if b_items === nothing
-                    push!(result, ((as, (missing, missing))))
-                else
-                    for bs in b_items
-                        push!(result, ((as, bs)))
-                    end
-                end
-            end
-        end
-    elseif how == :right
-        for k in keys(seq_b_grp)
-            a_items = get(seq_a_grp, k, nothing)
-            b_items = get(seq_b_grp, k, [])
-            for bs in b_items
-                if a_items === nothing
-                    push!(result, (((missing, missing), bs)))
-                else
-                    for as in a_items
-                        push!(result, ((as, bs)))
-                    end
-                end
-            end
-        end
-    else
-        throw(DomainError("$(string(how)) is not defined in arrjoin function. Choose between [:inner, :left, :right]"))
     end
 
     return result
 end
+
+function mapcat(f::Function, seq::Any)
+    if !(seq isa AbstractArray)
+        return f(seq)
+    end
+    return vcat([mapcat(f, s) for s in seq]...)
 end
 
+function merged_sort(seq::Vector{<:Vector}; key::Function=identity, rev=false)
+    return mapcat(identity, seq) |> flatseq -> sort(flatseq, by=key, rev=rev)
+end
 
+function partition(n::Int, seq::Vector{T}; pad=nothing)::Vector{Tuple} where T
+    if isempty(seq)
+        return Vector{Tuple}()
+    end
+    chunks = [Tuple(geti(j, seq, default=pad) for j in i:i+n-1) for i in 1:n:length(seq)]
+    # Determine if last chunk is partial based on sequence length
+    if pad === nothing && (length(seq) % n) != 0
+        # drop partial final chunk when no padding
+        return chunks[1:end-1]
+    end
+    return chunks
+end
+
+end

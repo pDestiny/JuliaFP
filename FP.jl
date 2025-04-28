@@ -227,7 +227,7 @@ function pluck(ind::T, seqs::Vector{Dict{T, Any}}) where {T}
 end
 
 function pluck(ind::Vector{Int}, seqs::Vector{<:Vector})
-    return Base.map(curry(geti, ind), seqs)
+    return Base.map(Tuple ∘ curry(geti, ind), seqs)
 end
 
 end

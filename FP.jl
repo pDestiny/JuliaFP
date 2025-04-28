@@ -312,6 +312,34 @@ function clear!(m::Memoize)
     empty!(m.memory)
 end
 
+function assoc(dict, k, v)
+    return merge(dict, Dict(k => v))
+end
+
+function _anytype_dict(d)
+    if !(d isa Dict)
+        return d
+    end
+    return merge([v isa Dict ? Dict{Any, Any}(k => _anytype_dict(d[k])) : Dict{Any, Any}(k => v) for (k, v) ∈ pairs(d)]...)
+end
+
+# 
+function assoc(dict, deepkey::Vector, v)
+    ori_dict = deepcopy(_anytype_dict(dict))
+    new_dict = ori_dict
+    for (i, k) in enumerate(deepkey)
+        if i == length(deepkey)  # 마지막 key
+            new_dict[k] = v
+        else
+            if !haskey(new_dict, k) || !(new_dict[k] isa AbstractDict)
+                new_dict[k] = Dict{Any, }()
+            end
+            new_dict = new_dict[k]
+        end
+    end
+    return ori_dict
+end
+
 end
 
 

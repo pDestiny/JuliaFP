@@ -340,6 +340,21 @@ function assoc(dict, deepkey::Vector, v)
     return ori_dict
 end
 
+function disassoc(d::Dict{T, <:Any}, k::T) where {T}
+    new_d = deepcopy(d)
+    delete!(new_d, k)
+    return new_d
+end
+
+function disassoc(d::Dict{T, <:Any}, ks::T...) where {T}
+    new_d = _anytype_dict(d)
+    for k ∈ ks
+        delete!(new_d, k)
+    end
+    return new_d
+end
+
+
 end
 
 

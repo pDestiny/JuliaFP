@@ -1,5 +1,7 @@
 module FP
 
+using Serialization
+
 export Result, is_ok, map, flatmap, curry, branch, fork, fold, diffseq, flip, groupby, interleave, pluck
 
 ### default Funcional Programming Starts ###
@@ -230,4 +232,86 @@ function pluck(ind::Vector{Int}, seqs::Vector{<:Vector})
     return Base.map(Tuple ∘ curry(geti, ind), seqs)
 end
 
+function sliding_window(n::Int, seq::AbstractVector)
+    return [@view seq[i:i+n-1] for i in 1:length(seq) - n + 1]
 end
+
+function sliding_window(n::Int, seq::AbstractString)
+    return [@view seq[i:i+n-1] for i in 1:length(seq) - n + 1]
+end
+
+function first(seq::Vector)
+    return Base.first(seq)
+end
+
+function first(n::Int, seq::Vector)
+    return Base.first(seq, n)
+end
+
+function last(seq::Vector)
+    return Base.last(seq)
+end
+
+function last(n::Int, seq::Vector)
+    return Base.last(seq, n)
+end
+
+function topk(k::Int, seq::Vector; key::Function=identity)
+    return Base.first((sort(seq, by=key, rev=true)), k)
+end
+
+function countby(key::Function, seq::Vector{T})::Dict{T, Int} where {T}
+    grp = groupby(key, seq)
+    return Dict(k => length(v) for (k, v) ∈ pairs(grp))
+end
+
+function dd(func)
+    return (x) -> begin
+        func(x)
+        return x
+    end
+end
+
+function juxt(funcs::Function...)
+    return x -> Tuple(func(x) for func ∈ funcs)
+end
+
+function juxt(funcs::Vector{Function})
+    return x-> Tuple(func(x) for func ∈ funcs)
+end
+
+mutable struct Memoize
+    f::Function
+    memory::Dict{Any, Any}
+    Memoize(f) = new(f, Dict{Any, Any}())
+end
+
+function _ordered_kwargs(kwargs::Dict)
+    keys_sorted = sort(collect(keys(kwargs)))
+    return NamedTuple{Tuple{keys_sorted}}(getfield(kwargs, k) for k in keys_sorted)
+end
+
+function _make_key(args, kwargs)
+    io = IOBuffer()
+    Serialization.serialize(io, (args, _ordered_kwargs(kwargs)))
+    return take!(io)
+end
+
+function (m::Memoize)(args...; kwargs...)
+    key = _make_key(args, kwargs)  # 입력값을 (args, kwargs) tuple로 묶어서 key로
+    if haskey(m.memory, key)
+        return m.memory[key]
+    else
+        result = m.f(args...; kwargs...)
+        m.memory[key] = result
+        return result
+    end
+end
+
+function clear!(m::Memoize)
+    empty!(m.memory)
+end
+
+end
+
+

@@ -1,6 +1,6 @@
 module FP
 
-export Result, is_ok, map, flatmap, curry, branch, fork, fold, diffseq, flip, groupby, interleave
+export Result, is_ok, map, flatmap, curry, branch, fork, fold, diffseq, flip, groupby, interleave, pluck
 
 ### default Funcional Programming Starts ###
 
@@ -220,6 +220,14 @@ function partition(n::Int, seq::Vector{T}; pad=nothing)::Vector{Tuple} where T
         return chunks[1:end-1]
     end
     return chunks
+end
+# map(curried.get(idx), seqs)
+function pluck(ind::T, seqs::Vector{Dict{T, Any}}) where {T}
+    return Base.map(curry(geti, ind), seqs)
+end
+
+function pluck(ind::Vector{Int}, seqs::Vector{<:Vector})
+    return Base.map(curry(geti, ind), seqs)
 end
 
 end

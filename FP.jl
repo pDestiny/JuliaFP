@@ -92,24 +92,24 @@ function dropl(n::Int, seq::AbstractArray{T})::AbstractArray{T} where {T}
            throw(DomainError("$n is bigger than sequence size ($(length(seq)))"))
 end
 
-function frequencies(seq::AbstractArray{T})::Dict{T, Int64} where {T}
+function frequencies(seq::AbstractArray{T})::AbstractDict{T, Int64} where {T}
     seq = deepcop(seq)
     return isempty(seq) ? Dict{T, Int64}() :
            Dict(Base.map(item -> (item, count((==)(item), seq)), unique(seq)))
 end
 
 function geti(idx::Union{Int64, T},
-              subject::Union{Dict{T, E}, AbstractArray{E}};
+              subject::Union{AbstractDict, AbstractArray{E}};
               default::Union{K, T} = nothing)::Union{K, E} where {T, E, K}
     if subject isa AbstractArray
         return (1 <= idx <= length(subject)) ? subject[idx] : default
-    elseif subject isa Dict
+    elseif subject <: AbstractDict
         return get(subject, idx, default)
     end
 end
 
 function geti(idx::AbstractArray{Union{Int64, T}},
-              subject::Union{Dict{T, E}, AbstractArray{E}};
+              subject::Union{AbstractDict{T, E}, AbstractArray{E}};
               default::Union{Nothing, T} = nothing)::AbstractArray{Union{E, Nothing}} where {T, E}
     if subject isa AbstractArray
         return (1 <= maximum(idx) <= length(subject)) ? subject[idx] :
@@ -119,7 +119,7 @@ function geti(idx::AbstractArray{Union{Int64, T}},
     end
 end
 
-function groupby(cond::Function, seq::AbstractArray{T})::Dict{Any, AbstractArray{T}} where {T}
+function groupby(cond::Function, seq::AbstractArray{T})::AbstractDict{Any, AbstractArray{T}} where {T}
     return reduce((acc, item) -> merge(vcat, acc, Dict(cond(item) => [item])),
                   seq, init = Dict{Any, AbstractArray{T}}())
 end
@@ -224,7 +224,7 @@ function partition(n::Int, seq::AbstractArray{T}; pad=nothing)::AbstractArray{Tu
     return chunks
 end
 # map(curried.get(idx), seqs)
-function pluck(ind::T, seqs::AbstractArray{Dict{T, Any}}) where {T}
+function pluck(ind::T, seqs::AbstractArray{AbstractDict{T, Any}}) where {T}
     return Base.map(curry(geti, ind), seqs)
 end
 
@@ -276,7 +276,7 @@ function topk(k::Int, seq::AbstractArray; key::Function=identity)
     return Base.first((sort(seq, by=key, rev=true)), k)
 end
 
-function countby(key::Function, seq::AbstractArray{T})::Dict{T, Int} where {T}
+function countby(key::Function, seq::AbstractArray{T})::AbstractDict{T, Int} where {T}
     grp = groupby(key, seq)
     return Dict(k => length(v) for (k, v) ∈ pairs(grp))
 end
@@ -298,11 +298,11 @@ end
 
 mutable struct Memoize
     f::Function
-    memory::Dict{Any, Any}
+    memory::AbstractDict{Any, Any}
     Memoize(f) = new(f, Dict{Any, Any}())
 end
 
-function _ordered_kwargs(kwargs::Dict)
+function _ordered_kwargs(kwargs::AbstractDict)
     keys_sorted = sort(collect(keys(kwargs)))
     return NamedTuple{Tuple{keys_sorted}}(getfield(kwargs, k) for k in keys_sorted)
 end
@@ -333,10 +333,10 @@ function assoc(dict, k, v)
 end
 
 function _anytype_dict(d)
-    if !(d isa Dict)
+    if !(d isa AbstractDict)
         return d
     end
-    return merge([v isa Dict ? Dict{Any, Any}(k => _anytype_dict(d[k])) : Dict{Any, Any}(k => v) for (k, v) ∈ pairs(d)]...)
+    return merge([v isa AbstractDict ? Dict{Any, Any}(k => _anytype_dict(d[k])) : Dict{Any, Any}(k => v) for (k, v) ∈ pairs(d)]...)
 end
 
 # 
@@ -356,13 +356,13 @@ function assoc(dict, deepkey::AbstractArray, v)
     return ori_dict
 end
 
-function disassoc(d::Dict{T, <:Any}, k::T) where {T}
+function disassoc(d::AbstractDict{T, <:Any}, k::T) where {T}
     new_d = deepcopy(d)
     delete!(new_d, k)
     return new_d
 end
 
-function disassoc(d::Dict{T, <:Any}, ks::T...) where {T}
+function disassoc(d::AbstractDict{T, <:Any}, ks::T...) where {T}
     new_d = _anytype_dict(d)
     for k ∈ ks
         delete!(new_d, k)
@@ -370,14 +370,14 @@ function disassoc(d::Dict{T, <:Any}, ks::T...) where {T}
     return new_d
 end
 
-function valmap(f::Function, d::Dict{T, K})::Dict{T, <:Any} where {T, K}
+function valmap(f::Function, d::AbstractDict{T, K})::AbstractDict{T, <:Any} where {T, K}
     return Dict(Base.map(collect(pairs(new_d))) do p
         k, v = p
         return k => f(v)
     end)
 end
 
-function valfilter(pred::Function, d::Dict{T, K})::Dict{T, K} where {T, K}
+function valfilter(pred::Function, d::AbstractDict{T, K})::AbstractDict{T, K} where {T, K}
     return Dict(Base.filter(collect(pairs(d))) do p
         _, v = p
         return pred(v)
@@ -388,27 +388,30 @@ function compl(prediciate::Function)::Function
     return (!) ∘ prediciate
 end
 
-function itemmap(f::Function, dict::Dict)
+function itemmap(f::Function, dict::AbstractDict)
     return Dict(f(p) for p ∈ pairs(dict))
 end
 
-function itemfilter(pred::Function, dict::Dict)
+function itemfilter(pred::Function, dict::AbstractDict)
     return Dict(filter(collect(pairs(dict)))) do p
         return pred(p)
     end
 end
 
-function keyfilter(pred::Function, dict::Dict{T, K})::Dict{T, K} where {T, K}
+function keyfilter(pred::Function, dict::AbstractDict{T, K})::AbstractDict{T, K} where {T, K}
     return Dict(k => v for (k, v) ∈ filter(pred ∘ ffirst, collect(zip(keys(dict), values(dict)))))
 end
 
-function keymap(f::Function, dict::Dict)
+function keymap(f::Function, dict::AbstractDict)
     return Dict(Base.map(collect(pairs(dict))) do p
         k, v = p
         return f(k) => v
     end)
 end
 
+function unzip(z::Base.Iterators.Zip)
+    return [z...]
+end
 
 
 end

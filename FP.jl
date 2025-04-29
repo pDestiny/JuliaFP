@@ -10,37 +10,48 @@ abstract type AbstractResult{T, E} end
 
 struct Ok{T} <: AbstractResult{T, Nothing}
     value::T
+    error::Nothing
 end
 
-struct Error{E} <: AbstractResult{Nothing, E}
+
+
+struct Err{E} <: AbstractResult{Nothing, E}
+    value::Nothing
     error::E
 end
 
-is_ok(r::Ok) = true
-is_ok(r::Error) = false
+Ok(value::T) where T = Ok(value, nothing)
+Err(error::E) where E = Err(nothing, error)
 
-map(f::Function, r::Ok, args...) = begin
+is_ok(r::Ok) = true
+is_ok(r::Err) = false
+
+mmap(f::Function, args...; kwargs...) = begin
     try
-        return Ok(f(r.value, args...))
+        return Ok(f(args...; kwargs...))
     catch e
-        return Error(e)
+        return Err(e)
     end
 end
 
 curry(f::Function, args...; kwargs...) = begin
     method = Base.first(methods(f))
-    required_args = method.nargs - length(Base.kwarg_decl(method))
+    if occursin("Base", string(method.module))
+        required_args = method.nargs - length(Base.kwarg_decl(method))
+    else
+        required_args = method.nargs - length(Base.kwarg_decl(method)) - 1
+    end
     return length(args) >= required_args ? f(args...; kwargs...) :
            (more_args...; more_kwargs...) -> curry(f, args..., more_args...; kwargs..., more_kwargs...)
 end
 
-map(f::Function, r::Error) = r
+mmap(f::Function, r::Err) = r
 
-flatmap(f::Function, r::Ok, args...) = begin
+flatmmap(f::Function, r::Ok, args...) = begin
     try
         return f(r.value, args...)
     catch e
-        return Error(e)
+        return Err(e)
     end
 end
 

@@ -2,7 +2,7 @@ module FP
 
 using Serialization
 
-export Result, is_ok, map, flatmap, curry, branch, fork, fold, diffseq, flip, groupby, interleave, pluck
+export Result, is_ok, map, flatmap, curry, branch, fork, fold, diffseq, flip, groupby, interleave, pluck, ffirst, flast, unzip, keyfilter, keymap, valfilter, valmap, frequencies, geti, assoc, disassoc, countby, topk, flip, dropf, dropl, interleave, interpose, arrjoin, mapcat, merged_sort, juxt, Memoize, clear!, itemfilter, itemmap, countby, dd, compl
 
 ### default Funcional Programming Starts ###
 
@@ -125,7 +125,7 @@ function groupby(cond::Function, seq::AbstractArray{T})::AbstractDict{Any, Abstr
 end
 
 function flip(f::Function, args...; kwargs...)::Union{Function, Any}
-    m = first(methods(f))
+    m = Base.first(methods(f))
     if occursin("Base", string(m.module))
         throw(ErrorException("Base‑module function cannot be flipped"))
     end

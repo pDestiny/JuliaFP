@@ -26,9 +26,9 @@ Err(error::E) where E = Err(nothing, error)
 is_ok(r::Ok) = true
 is_ok(r::Err) = false
 
-mmap(f::Function, args...; kwargs...) = begin
+mmap(f::Function, r) = begin
     try
-        return Ok(f(args...; kwargs...))
+        return Ok(f(r.value))
     catch e
         return Err(e)
     end
@@ -37,32 +37,65 @@ end
 curry(f::Function, args...; kwargs...) = begin
     method = Base.first(methods(f))
     if occursin("Base", string(method.module))
-        required_args = method.nargs - length(Base.kwarg_decl(method))
+        required_args = method.nargs
     else
-        required_args = method.nargs - length(Base.kwarg_decl(method)) - 1
+        required_args = method.nargs - 1
     end
     return length(args) >= required_args ? f(args...; kwargs...) :
            (more_args...; more_kwargs...) -> curry(f, args..., more_args...; kwargs..., more_kwargs...)
 end
 
-mmap(f::Function, r::Err) = r
-
-flatmmap(f::Function, r::Ok, args...) = begin
+flatmmap(f::Function, r::Ok) = begin
     try
-        return f(r.value, args...)
+        return f(r.value)
     catch e
         return Err(e)
     end
 end
 
-fork(f::Function, g::Function, combine::Function) =
-    (r::AbstractResult, args...) -> combine(f(r, args...), g(r, args...))
+struct CombineFunction <: Function end
 
-fold(r::AbstractResult, on_success::Function, on_fail::Function) =
+function (::CombineFunction)(combine::Function, f::Function, g::Function)
+    return (r::AbstractResult) -> begin
+        try
+            frange = flatmmap(f, r)
+            grange = flatmmap(g, r)
+            if is_ok(frange) && is_ok(grange)
+                return Ok(combine(frange, grange))
+            else
+                if !is_ok(frange)
+                    return frange
+                en
+
+                if !is_ok(grange)
+                    return grange
+                end                
+            end
+        catch e
+            return Err(e)
+        end
+    end
+end
+
+fork(f::Function, g::Function, combine::Function) =
+    (r::AbstractResult) -> CombineFunction(combine, f, g)(r)
+
+fold(on_success::Function, on_fail::Function) = (r::AbstractResult) ->
     is_ok(r) ? on_success(r) : on_fail(r)
 
 branch(cond::Function, f::Function, g::Function) =
-    (r::AbstractResult, args...) -> cond(r) ? map(f, r, args...) : map(g, r, args...)
+    (r::AbstractResult) -> begin
+        condition = mmap(cond, r)
+        if !is_ok(condition)
+            return condition
+        else
+            if condition.value isa Bool
+                return condition.value ? mmap(f, r) : mmap(g, r)
+            else
+                return Err(TypeError(:branch, Bool, typeof(condition.value)))
+            end
+        end
+end
 
 ### default functional Programming Function Ends ###
 
@@ -157,7 +190,7 @@ end
 
 function interpose(el::T, seq::AbstractArray{Union{E}})::AbstractArray{Union{T, E}} where {T, E}
     return reduce((acc, item) -> vcat(acc..., item, el),
-                  seq, init = AbstractArray{Union{T, E}}())
+                  seq, init = Vector{Union{T, E}}())
 end
 
 isuniq(seqs::AbstractArray{T}) where {T} = length(unique(seqs)) == length(seqs)

@@ -2,7 +2,7 @@ module FP
 
 using Serialization
 
-export AbstractResult, Ok, Error, is_ok, map, flatmap, curry, branch, fork, fold, diffseq, flip, groupby, interleave, pluck, ffirst, flast, unzip, keyfilter, keymap, valfilter, valmap, frequencies, geti, assoc, disassoc, countby, topk, flip, dropf, dropl, interleave, interpose, arrjoin, mapcat, merged_sort, juxt, Memoize, clear!, itemfilter, itemmap, countby, dd, compl
+export AbstractResult, Ok, Err, is_ok, map, flatmap, curry, branch, fork, fold, diffseq, flip, groupby, interleave, pluck, ffirst, flast, unzip, keyfilter, keymap, valfilter, valmap, frequencies, geti, assoc, disassoc, countby, topk, flip, dropf, dropl, interleave, interpose, arrjoin, mapcat, merged_sort, juxt, Memoize, clear!, itemfilter, itemmap, countby, dd, compl, fork
 
 ### default Funcional Programming Starts ###
 
@@ -34,18 +34,9 @@ mmap(f::Function, r) = begin
     end
 end
 
-curry(f::Function, args...; kwargs...) = begin
-    method = Base.first(methods(f))
-    if occursin("Base", string(method.module))
-        required_args = method.nargs
-    else
-        required_args = method.nargs - 1
-    end
-    return length(args) >= required_args ? f(args...; kwargs...) :
-           (more_args...; more_kwargs...) -> curry(f, args..., more_args...; kwargs..., more_kwargs...)
-end
 
-flatmmap(f::Function, r::Ok) = begin
+
+flatmmap(f::Function, r::AbstractResult) = begin
     try
         return f(r.value)
     catch e
@@ -53,22 +44,20 @@ flatmmap(f::Function, r::Ok) = begin
     end
 end
 
-struct CombineFunction <: Function end
-
-function (::CombineFunction)(combine::Function, f::Function, g::Function)
+function fork(combfunc::Function, f::Function, g::Function)
     return (r::AbstractResult) -> begin
         try
-            frange = flatmmap(f, r)
-            grange = flatmmap(g, r)
-            if is_ok(frange) && is_ok(grange)
-                return Ok(combine(frange, grange))
+            fr = mmap(f, r)
+            gr = mmap(g, r)
+            if is_ok(fr) && is_ok(gr)
+                return Ok(combfunc(fr.value, gr.value))
             else
-                if !is_ok(frange)
-                    return frange
-                en
+                if !is_ok(fr)
+                    return fr
+                end
 
-                if !is_ok(grange)
-                    return grange
+                if !is_ok(gr)
+                    return gr
                 end                
             end
         catch e
@@ -76,9 +65,6 @@ function (::CombineFunction)(combine::Function, f::Function, g::Function)
         end
     end
 end
-
-fork(f::Function, g::Function, combine::Function) =
-    (r::AbstractResult) -> CombineFunction(combine, f, g)(r)
 
 fold(on_success::Function, on_fail::Function) = (r::AbstractResult) ->
     is_ok(r) ? on_success(r) : on_fail(r)
@@ -92,15 +78,25 @@ branch(cond::Function, f::Function, g::Function) =
             if condition.value isa Bool
                 return condition.value ? mmap(f, r) : mmap(g, r)
             else
-                return Err(TypeError(:branch, Bool, typeof(condition.value)))
+                return Err(TypeError(:branch, "branch's condition function has returned an unexpected Type", Bool, typeof(condition.value)))
             end
         end
 end
-
 ### default functional Programming Function Ends ###
 
 
 ### Toolz / itertools‑style helpers ###
+
+curry(f::Function, args...; kwargs...) = begin
+    method = Base.first(methods(f))
+    if occursin("Base", string(method.module))
+        required_args = method.nargs
+    else
+        required_args = method.nargs - 1
+    end
+    return length(args) >= required_args ? f(args...; kwargs...) :
+           (more_args...; more_kwargs...) -> curry(f, args..., more_args...; kwargs..., more_kwargs...)
+end
 
 function cons(add_target::T, seq::AbstractArray{T}) where {T}
     return [[add_target]; deepcop(seq)]
@@ -112,6 +108,17 @@ end
 
 cmap(f::Function) = (itr::AbstractArray) -> Base.map(f, itr)
 cfilter(cond::Function) = (itr::AbstractArray) -> Base.filter(cond, itr)
+cjoin(delim::AbstractString) = (seq::Vector{String}) -> Base.join(seq, delim)
+cjoin(delim::AbstractString) = (seq::Vector{SubString}) -> Base.join(Base.string.(seq), delim)
+cjoin(delim::AbstractChar) = cjoin("$delim")
+csplit(spliter::AbstractString) = (str::AbstractString) -> Base.split(str, spliter)
+csplit(spliter::AbstractString) = (str::SubString) -> Base.split(string(str), spliter)
+csplit(spliter::AbstractChar) = csplit("$spliter")
+creplace(ps::Pair...) = (str::AbstractString) -> Base.replace(str, ps...)
+creplace(ps::Pair...) = (str::SubString) -> Base.replace(string(str), ps...)
+cstartswith(prefix::Union{AbstractString, Regex}) = (str::AbstractString) -> startswith(str, prefix)
+cstartswith(suffix::Union{AbstractString, Regex}) = (str::AbstractString) -> endswith(str, suffix)
+
 
 # diff by position between two sequences
 function diffseq(seq_a::AbstractArray{T}, seq_b::AbstractArray{T})::AbstractArray{Tuple{Int, Union{T, Nothing}, Union{T, Nothing}}} where {T}

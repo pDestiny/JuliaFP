@@ -85,6 +85,47 @@ end
 ### default functional Programming Function Ends ###
 
 
+#### Base Module FP wrapping Starts #####
+cmap(f::Function) = (itr::Union{AbstractArray, AbstractUnitRange}) -> Base.map(f, itr)
+cfilter(cond::Function) = (itr::Union{AbstractArray, AbstractUnitRange}) -> Base.filter(cond, itr)
+
+# unified csplit definition
+function csplit(spliter::AbstractString)
+  return function(str::AbstractString)
+    if typeof(str) <: SubString
+      return Base.split(string(str), spliter)
+    else
+      return Base.split(str, spliter)
+    end
+  end
+end
+csplit(spliter::AbstractChar) = csplit(string(spliter))
+
+function cjoin(delim::AbstractString)
+  return function(seq::AbstractArray{<:AbstractString})
+    if eltype(seq) <: SubString
+      return Base.join(string.(seq), delim)
+    else
+      return Base.join(seq, delim)
+    end
+  end
+end
+cjoin(delim::AbstractChar) = cjoin("$delim")
+
+function creplace(ps::Pair...)
+    return function(str::AbstractString)
+        if str isa SubString
+            return Base.replace(string(str), ps...)
+        else
+            return Base.replace(str, ps...)
+        end
+    end
+end
+cstartswith(prefix::Union{AbstractString, Regex}) = (str::AbstractString) -> startswith(str, prefix)
+cendsswith(suffix::Union{AbstractString, Regex}) = (str::AbstractString) -> endswith(str, suffix)
+
+#### Base Moudle FP wrapping Ends ####
+
 ### Toolz / itertools‑style helpers ###
 
 curry(f::Function, args...; kwargs...) = begin
@@ -99,25 +140,18 @@ curry(f::Function, args...; kwargs...) = begin
 end
 
 function cons(add_target::T, seq::AbstractArray{T}) where {T}
-    return [[add_target]; deepcop(seq)]
+    return vcat(add_target, seq...)
 end
+
+cons(add_target::Union{SubString, AbstractString}, seq::AbstractString) = add_target * seq
+
 
 function cone(add_target::T, seq::AbstractArray{T}) where {T}
-    return [deepcop(seq); [add_target]]
+    return vcat(seq..., add_target)
 end
 
-cmap(f::Function) = (itr::AbstractArray) -> Base.map(f, itr)
-cfilter(cond::Function) = (itr::AbstractArray) -> Base.filter(cond, itr)
-cjoin(delim::AbstractString) = (seq::Vector{String}) -> Base.join(seq, delim)
-cjoin(delim::AbstractString) = (seq::Vector{SubString}) -> Base.join(Base.string.(seq), delim)
-cjoin(delim::AbstractChar) = cjoin("$delim")
-csplit(spliter::AbstractString) = (str::AbstractString) -> Base.split(str, spliter)
-csplit(spliter::AbstractString) = (str::SubString) -> Base.split(string(str), spliter)
-csplit(spliter::AbstractChar) = csplit("$spliter")
-creplace(ps::Pair...) = (str::AbstractString) -> Base.replace(str, ps...)
-creplace(ps::Pair...) = (str::SubString) -> Base.replace(string(str), ps...)
-cstartswith(prefix::Union{AbstractString, Regex}) = (str::AbstractString) -> startswith(str, prefix)
-cstartswith(suffix::Union{AbstractString, Regex}) = (str::AbstractString) -> endswith(str, suffix)
+cone(add_target::Union{SubString, AbstractString}, seq::AbstractString) = seq * add_target
+
 
 
 # diff by position between two sequences

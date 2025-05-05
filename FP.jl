@@ -13,26 +13,29 @@ struct Ok{T} <: AbstractResult{T, Nothing}
     error::Nothing
 end
 
-
-
 struct Err{E} <: AbstractResult{Nothing, E}
     value::Nothing
     error::E
+    backtrace::AbstractArray
 end
 
 Ok(value::T) where T = Ok(value, nothing)
-Err(error::E) where E = Err(nothing, error)
+Err(error::E, backtrace::AbstractArray) where E = Err(nothing, error, backtrace)
+Err(error::E) where E = Err(nothing, error, [])
 
 is_ok(r::Ok) = true
 is_ok(r::Err) = false
 
-mmap(f::Function, r) = begin
+mmap(f::Function, r::AbstractResult) = begin
     try
         return Ok(f(r.value))
     catch e
-        return Err(e)
+        bt = catch_backtrace()
+        return Err(e, bt)
     end
 end
+
+cmmap(f::Function) = (r::AbstractResult) -> mmap(f, r)
 
 
 
@@ -40,9 +43,11 @@ flatmmap(f::Function, r::AbstractResult) = begin
     try
         return f(r.value)
     catch e
-        return Err(e)
+        return Err(e, catch_backtrace())
     end
 end
+
+cflatmmap(f::Function) = (r::AbstractResult) -> flatmmap(f, r)
 
 function fork(combfunc::Function, f::Function, g::Function)
     return (r::AbstractResult) -> begin
@@ -61,7 +66,7 @@ function fork(combfunc::Function, f::Function, g::Function)
                 end                
             end
         catch e
-            return Err(e)
+            return Err(e, catch_backtrace())
         end
     end
 end

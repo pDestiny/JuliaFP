@@ -99,10 +99,11 @@ function csplit(spliter::AbstractString)
     end
   end
 end
+
 csplit(spliter::AbstractChar) = csplit(string(spliter))
 
 function cjoin(delim::AbstractString)
-  return function(seq::AbstractArray{<:AbstractString})
+  return function(seq::Union{AbstractArray, Base.AbstractVecOrTuple})
     if eltype(seq) <: SubString
       return Base.join(string.(seq), delim)
     else
@@ -428,6 +429,10 @@ function countby(key::Function, seq::AbstractArray)::Dict
     return Dict(k => length(v) for (k, v) ∈ pairs(grp))
 end
 
+function countby(key::Function, seq::AbstractString)::Dict
+    return seq |> csplit("") |> curry(groupby, key) |> curry(valmap, Base.length)
+end
+
 function dd(func)
     return (x) -> begin
         func(x)
@@ -555,5 +560,3 @@ end
 
 
 end
-
-

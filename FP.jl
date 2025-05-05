@@ -274,8 +274,20 @@ function interleave(seqs::AbstractArray)
 end
 
 function interpose(el::T, seq::AbstractArray{Union{E}})::AbstractArray{Union{T, E}} where {T, E}
-    return reduce((acc, item) -> vcat(acc..., item, el),
-                  seq, init = Vector{Union{T, E}}())
+    elems = Vector{T}()
+    for (i, item) ∈ enumerate(seq)
+        if i == length(seq)
+            push!(elems, item)
+        else
+            push!(elems, item)
+            push!(elems, el)
+        end
+    end
+    return elems
+end
+
+function interpose(el::Union{AbstractChar, AbstractString}, seq::AbstractString)::String
+    return seq |> csplit("") |> cjoin(el)
 end
 
 isuniq(seqs::AbstractArray{T}) where {T} = length(unique(seqs)) == length(seqs)

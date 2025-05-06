@@ -28,7 +28,7 @@ is_ok(r::Err) = false
 
 mmap(f::Function, r::AbstractResult) = begin
     try
-        return Ok(f(r.value))
+        return r isa Err ? r : Ok(f(r.value))
     catch e
         bt = catch_backtrace()
         return Err(e, bt)
@@ -41,7 +41,7 @@ cmmap(f::Function) = (r::AbstractResult) -> mmap(f, r)
 
 flatmmap(f::Function, r::AbstractResult) = begin
     try
-        return f(r.value)
+        return r isa Err ? r : f(r.value)
     catch e
         return Err(e, catch_backtrace())
     end
@@ -563,5 +563,6 @@ function unzip(z::Base.Iterators.Zip)
     return [z...]
 end
 
-
 end
+
+

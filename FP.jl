@@ -233,10 +233,17 @@ function geti(idx::AbstractArray{Int}, subject::AbstractArray{T})::AbstractArray
 end
 
 """
-geti : dictionary 의 key 값을 array로 가져와서 subject 에서 가져와 Dictionary 로 반환한다.
+geti : dictionary 의 여러 level 깊이의 값을 가져온다.
 """
-function geti(idx::AbstractArray{T}, subject::AbstractDict{T, K}; default::Union{Nothing, G}=nothing)::AbstractDict where {T,K,G}
-    return Dict(i => Base.get(subject, i, default) for i in idx)
+function geti(idx::AbstractArray{T}, subject::AbstractDict) where {T}
+    new_dict::Dict{Any, Any} = deepcopy(subject)
+    for (i, k) ∈ enumerate(idx)
+        if i == length(idx)
+            return new_dict[k]
+        else
+            new_dict = new_dict[k]
+        end
+    end
 end
 
 function groupby(cond::Function, seq::AbstractArray{T}) where {T}

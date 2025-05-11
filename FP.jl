@@ -615,6 +615,52 @@ function tmap(f::Function, iterator::AbstractArray{T}; verbose=false) where {T}
         return results
     end
 end
+
+function tvalmap(f::Function, dictionary::AbstractDict{T, <:Any}; verbose=false) where {T}
+    global ndata = length(dictionary)
+    jobs_ch = Channel{Any}(Inf)
+    results_ch = Channel{Any}(Inf)
+
+    make_jobs() = let
+        for ((key, val)) = pairs(dictionary)
+            put!(jobs_ch, (key, val))
+        end
+        close(jobs_ch)
+    end
+
+    do_work() = let
+        for (key, val) ∈ jobs_ch
+            # capture the thread ID before executing the work
+            result = f(val)
+            put!(results_ch, (key, val, result))
+        end
+        # close(results_ch)  # still removed to prevent premature closing
+    end
+
+    @async make_jobs()
+    for _ = 1:Threads.nthreads()
+        @async do_work()
+    end
+
+    if verbose
+        global results = Dict()
+        @elapsed while ndata > 0
+            key, oridata, result = take!(results_ch)
+            results[key] = result
+            println("[$key] $oridata => $result")
+            global ndata -= 1
+        end
+        return results
+    else
+        global results = Dict()
+        @elapsed while ndata > 0
+            key, _, result = take!(results_ch)
+            results[key] = result
+            global ndata -= 1
+        end
+        return results
+    end
+end
 end
 
 

@@ -386,9 +386,9 @@ end
     end
 
     @testset "interpose TEST" begin
-        @test FP.interpose(0, [1,2,3]) == [1,0,2,0,3,0]
-        @test FP.interpose("z", ["a","b"]) == ["a","z","b","z"]
-        @test FP.interpose("-", ["solo"]) == ["solo","-"]
+        @test FP.interpose(0, [1,2,3]) == [1,0,2,0,3]
+        @test FP.interpose("z", ["a","b"]) == ["a","z","b"]
+        @test FP.interpose("-", ["solo"]) == ["solo"]
         @test FP.interpose(1, Int[]) == Int[]
     end
 
@@ -496,5 +496,14 @@ end
 
     @testset "unzip TEST" begin
         @test FP.unzip(zip([1,2], [3,4])) == [(1,3), (2,4)]
+    end
+
+    @testset "tmap TEST" begin
+        function slow_square(x)
+            sleep(0.1)  # 일부러 딜레이를 줌
+            return x^2
+        end
+        data = collect(1:10)
+        @test tmap(slow_square, data) == [1, 4, 9, 16, 25, 36, 49, 64, 81, 100]
     end
 end

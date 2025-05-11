@@ -2,7 +2,7 @@ module FP
 
 using Serialization
 
-export AbstractResult, Ok, Err, is_ok, map, flatmap, curry, branch, fork, fold, diffseq, flip, groupby, interleave, pluck, ffirst, flast, unzip, keyfilter, keymap, valfilter, valmap, frequencies, geti, assoc, disassoc, countby, topk, flip, dropf, dropl, interleave, interpose, arrjoin, mapcat, merged_sort, juxt, Memoize, clear!, itemfilter, itemmap, countby, dd, compl, fork
+export AbstractResult, Ok, Err, is_ok, map, flatmap, curry, branch, fork, fold, diffseq, flip, groupby, interleave, pluck, ffirst, flast, unzip, keyfilter, keymap, valfilter, valmap, frequencies, geti, assoc, disassoc, countby, topk, flip, dropf, dropl, interleave, interpose, arrjoin, mapcat, merged_sort, juxt, Memoize, clear!, itemfilter, itemmap, countby, dd, compl, tmap
 
 ### default Funcional Programming Starts ###
 
@@ -563,6 +563,51 @@ function unzip(z::Base.Iterators.Zip)
     return [z...]
 end
 
+function tmap(f::Function, iterator::AbstractArray{T}; verbose=false) where {T}
+    global ndata = length(iterator)
+    jobs_ch = Channel{Any}(Inf)
+    results_ch = Channel{Any}(Inf)
+
+    make_jobs() = let
+        for job_id = 1:ndata
+            put!(jobs_ch, (job_id, iterator[job_id]))
+        end
+        close(jobs_ch)
+    end
+
+    do_work() = let
+        for (job_id, data) ∈ jobs_ch
+            # capture the thread ID before executing the work
+            result = f(data)
+            put!(results_ch, (job_id, data, result))
+        end
+        # close(results_ch)  # still removed to prevent premature closing
+    end
+
+    @async make_jobs()
+    for _ = 1:Threads.nthreads()
+        @async do_work()
+    end
+
+    if verbose
+        global results = Vector{Any}(undef, ndata)
+        @elapsed while ndata > 0
+            job_id, oridata, result = take!(results_ch)
+            results[job_id] = result
+            println("[$(job_id)] $oridata => $result")
+            global ndata -= 1
+        end
+        return results
+    else
+        global results = Vector{Any}(undef, ndata)
+        @elapsed while ndata > 0
+            job_id, oridata, result = take!(results_ch)
+            results[job_id] = result
+            global ndata -= 1
+        end
+        return results
+    end
+end
 end
 
 

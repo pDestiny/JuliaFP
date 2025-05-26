@@ -4,7 +4,15 @@ This code is for functional programming for julia, inspired by python toolz pack
 
 ## 함수형 프로그래밍이란?
 
-함수형 프로그래밍(Functional Programming, FP)은 **함수를 일급 시민(first-class citizen)**으로 다루고, 상태(state)나 부수 효과(side effects)를 최소화하는 선언형 프로그래밍 패러다. 수학적 함수 개념을 기반으로 하며, 로직을 함수의 조합으로 표현하는 것이 특징인 프로그래밍 패턴
+함수형 프로그래밍(Functional Programming, FP)은 **함수를 일급 시민(first-class citizen)**으로 다루고, 상태(state)나 부수 효과(side effects)를 최소화하는 선언형 프로그래밍 패러다임. 수학적 함수 개념을 기반으로 하며, 로직을 함수의 조합으로 표현하는 것이 특징인 프로그래밍 패턴
+
+## 모나드에 대한 설명
+
+**모나드(Monad)**는 함수형 프로그래밍에서 자주 사용되는 계산의 컨테이너 패턴이다.
+직접 값을 다루는 대신, 값을 안전하게 감싸고 (wrap), 필요한 계산을 연결(bind)하여 처리한다.
+이는 예외 처리, 비어 있는 값 처리, 비동기 흐름 제어 등 다양한 상황에서 유용하게 사용됨.
+
+이 라이브러리에서는 Ok / Err 타입을 통해 모나드 패턴을 구현하며, 이를 기반으로 안전한 함수 조합이 가능.
 
 ## 각 함수에 대한 설명
 

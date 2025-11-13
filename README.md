@@ -2,6 +2,17 @@
 
 This code is for functional programming for julia, inspired by python toolz package.
 
+## Installation
+
+The project follows the standard Julia package layout and can be added through
+the package manager:
+
+```julia
+] add JuliaFP
+```
+
+After installation load the module with `using JuliaFP`.
+
 ## 함수형 프로그래밍이란?
 
 함수형 프로그래밍(Functional Programming, FP)은 **함수를 일급 시민(first-class citizen)**으로 다루고, 상태(state)나 부수 효과(side effects)를 최소화하는 선언형 프로그래밍 패러다임. 수학적 함수 개념을 기반으로 하며, 로직을 함수의 조합으로 표현하는 것이 특징인 프로그래밍 패턴

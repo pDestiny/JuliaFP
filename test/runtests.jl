@@ -1,8 +1,7 @@
 using Test
+using JuliaFP
 
-include("FP.jl")
-
-using .FP
+const FP = JuliaFP
 
 # test cases
 

@@ -1,6 +1,7 @@
-module FP
+module JuliaFP
 
 using Serialization
+using Base.Threads
 
 export AbstractResult, Ok, Err, is_ok, map, flatmap, curry, branch, fork, fold, diffseq, flip, groupby, interleave, pluck, ffirst, flast, unzip, keyfilter, keymap, valfilter, valmap, frequencies, geti, assoc, disassoc, countby, topk, flip, dropf, dropl, interleave, interpose, arrjoin, mapcat, merged_sort, juxt, Memoize, clear!, itemfilter, itemmap, countby, dd, compl, tmap
 
@@ -570,96 +571,120 @@ function unzip(z::Base.Iterators.Zip)
     return [z...]
 end
 
-function tmap(f::Function, iterator::AbstractArray{T}; verbose=false) where {T}
-    global ndata = length(iterator)
-    jobs_ch = Channel{Any}(Inf)
-    results_ch = Channel{Any}(Inf)
+"""
+    tmap(f::Function, iterator::AbstractArray{T}; verbose::Bool=false) where {T}
 
-    make_jobs() = let
-        for job_id = 1:ndata
-            put!(jobs_ch, (job_id, iterator[job_id]))
+Apply ``f`` to every element of ``iterator`` in parallel using Julia's threading
+runtime.
+
+# Arguments
+- ``f::Function``: Callable that receives each element of ``iterator`` and
+  produces a mapped value.
+- ``iterator::AbstractArray{T}``: Array whose elements are processed
+  independently.
+- ``verbose::Bool=false``: When ``true``, print each mapping operation as it is
+  completed.
+
+# Returns
+- ``AbstractArray`` with the same axes as ``iterator`` containing the mapped
+  results.  The element type reflects the return type of ``f`` when applied to
+  the first element of ``iterator``.
+"""
+function tmap(f::Function, iterator::AbstractArray{T}; verbose::Bool=false) where {T}
+    n = length(iterator)
+    n == 0 && return similar(iterator, Any)
+
+    first_idx = firstindex(iterator)
+    first_input = iterator[first_idx]
+    first_output = f(first_input)
+    results = similar(iterator, typeof(first_output))
+    results[first_idx] = first_output
+
+    printer = verbose ? let output_lock = ReentrantLock()
+        (label, input, output) -> begin
+            lock(output_lock)
+            try
+                println("[$label] $input => $output")
+            finally
+                unlock(output_lock)
+            end
+            return nothing
         end
-        close(jobs_ch)
+    end : nothing
+
+    if printer !== nothing
+        printer(first_idx, first_input, first_output)
     end
 
-    do_work() = let
-        for (job_id, data) ∈ jobs_ch
-            # capture the thread ID before executing the work
-            result = f(data)
-            put!(results_ch, (job_id, data, result))
+    @threads for idx in eachindex(iterator)
+        idx == first_idx && continue
+        input = iterator[idx]
+        output = f(input)
+        results[idx] = output
+        if printer !== nothing
+            printer(idx, input, output)
         end
-        # close(results_ch)  # still removed to prevent premature closing
     end
 
-    @async make_jobs()
-    for _ = 1:Threads.nthreads()
-        @async do_work()
-    end
-
-    if verbose
-        global results = Vector{Any}(undef, ndata)
-        @elapsed while ndata > 0
-            job_id, oridata, result = take!(results_ch)
-            results[job_id] = result
-            println("[$(job_id)] $oridata => $result")
-            global ndata -= 1
-        end
-        return results
-    else
-        global results = Vector{Any}(undef, ndata)
-        @elapsed while ndata > 0
-            job_id, oridata, result = take!(results_ch)
-            results[job_id] = result
-            global ndata -= 1
-        end
-        return results
-    end
+    return results
 end
 
-function tvalmap(f::Function, dictionary::AbstractDict{T, <:Any}; verbose=false) where {T}
-    global ndata = length(dictionary)
-    jobs_ch = Channel{Any}(Inf)
-    results_ch = Channel{Any}(Inf)
+"""
+    tvalmap(f::Function, dictionary::AbstractDict{T, <:Any}; verbose::Bool=false) where {T}
 
-    make_jobs() = let
-        for ((key, val)) = pairs(dictionary)
-            put!(jobs_ch, (key, val))
+Apply ``f`` to every value within ``dictionary`` concurrently, returning a new
+``Dict`` with the same keys and the transformed values.
+
+# Arguments
+- ``f::Function``: Callable that receives each value from ``dictionary`` and
+  returns a transformed value.
+- ``dictionary::AbstractDict{T, <:Any}``: Dictionary whose entries are mapped
+  independently.
+- ``verbose::Bool=false``: When ``true``, print the mapping progress for each
+  key/value pair.
+
+# Returns
+- ``Dict{T, R}`` containing the original keys and the mapped values ``R``
+  produced by ``f``.
+"""
+function tvalmap(f::Function, dictionary::AbstractDict{T, <:Any}; verbose::Bool=false) where {T}
+    n = length(dictionary)
+    n == 0 && return Dict{T, Any}()
+
+    pairs_vec = collect(pairs(dictionary))
+    first_key, first_value = pairs_vec[1]
+    first_output = f(first_value)
+    result_type = typeof(first_output)
+    results = Vector{Pair{T, result_type}}(undef, n)
+    results[1] = first_key => first_output
+
+    printer = verbose ? let output_lock = ReentrantLock()
+        (label, input, output) -> begin
+            lock(output_lock)
+            try
+                println("[$label] $input => $output")
+            finally
+                unlock(output_lock)
+            end
+            return nothing
         end
-        close(jobs_ch)
+    end : nothing
+
+    if printer !== nothing
+        printer(first_key, first_value, first_output)
     end
 
-    do_work() = let
-        for (key, val) ∈ jobs_ch
-            # capture the thread ID before executing the work
-            result = f(val)
-            put!(results_ch, (key, val, result))
+    @threads for idx in eachindex(pairs_vec)
+        idx == 1 && continue
+        key, value = pairs_vec[idx]
+        output = f(value)
+        results[idx] = key => output
+        if printer !== nothing
+            printer(key, value, output)
         end
-        # close(results_ch)  # still removed to prevent premature closing
     end
 
-    @async make_jobs()
-    for _ = 1:Threads.nthreads()
-        @async do_work()
-    end
-
-    if verbose
-        global results = Dict()
-        @elapsed while ndata > 0
-            key, oridata, result = take!(results_ch)
-            results[key] = result
-            println("[$key] $oridata => $result")
-            global ndata -= 1
-        end
-        return results
-    else
-        global results = Dict()
-        @elapsed while ndata > 0
-            key, _, result = take!(results_ch)
-            results[key] = result
-            global ndata -= 1
-        end
-        return results
-    end
+    return Dict{T, result_type}(results)
 end
 end
 
